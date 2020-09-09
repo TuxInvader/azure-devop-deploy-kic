@@ -10,8 +10,8 @@ resources:
 
 variables:
   # Container registry service connection established during pipeline creation
-  dockerRegistryServiceConnection: '$(dockerServiceConnection)'
   imageRepository: 'nginx/npluskic'
+  container_service_connection: $(containerServiceConn)
   containerRegistry: '$(azureRegistry)'
   dockerfilePath: '$(Build.SourcesDirectory)/build/DockerfileWithOpentracingForPlus'
   DOCKER_BUILDKIT: 1
@@ -66,17 +66,15 @@ stages:
         script: |
           echo "$(nginx_repo_cert)" | base64 -d | sudo tee $(Build.SourcesDirectory)/nginx-repo.crt
           echo "$(nginx_repo_key)" | base64 -d | sudo tee $(Build.SourcesDirectory)/nginx-repo.key
-          pwd
-          ls -lrt
-      
+
     - task: Docker@2
       displayName: Build and push an image to container registry
       inputs:
+        containerRegistry: $(container_service_connection)
         buildContext: $(Build.SourcesDirectory) 
         command: buildAndPush
         repository: $(imageRepository)
         dockerfile: $(dockerfilePath)
-        containerRegistry: $(dockerRegistryServiceConnection)
         tags: |
           $(tag)
 
