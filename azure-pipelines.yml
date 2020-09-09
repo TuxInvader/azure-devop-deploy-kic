@@ -6,7 +6,10 @@ trigger:
 - master
 
 resources:
-- repo: self
+ repositories:
+   - repository: NGINXKIC
+     type: github
+     name: nginxinc/kubernetes-ingress
 
 variables:
   # Container registry service connection established during pipeline creation
@@ -53,6 +56,8 @@ stages:
     pool:
       vmImage: $(vmImageName)
     steps:
+    
+    - checkout: NGINXKIC 
     - task: Bash@3
       displayName: Checkout Branch $(branch)
       inputs:
