@@ -1,0 +1,192 @@
+# Docker
+# Build and push an image to Azure Container Registry
+# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+
+trigger:
+- master
+
+resources:
+- repo: self
+
+variables:
+  # Container registry service connection established during pipeline creation
+  dockerRegistryServiceConnection: '$(dockerServiceConnection)'
+  imageRepository: 'nginx/npluskic'
+  containerRegistry: '$(azureRegistry)'
+  dockerfilePath: '$(Build.SourcesDirectory)/build/DockerfileWithOpentracingForPlus'
+  DOCKER_BUILDKIT: 1
+
+  branch: release-1.8
+  tag: 'v1.8'
+
+  # Build docker image when pipelineBuild is true
+  pipeline_build: $[eq(variables['pipelineBuild'], 'true')]
+
+  # Deploy KIC when pipelineDeploy is true
+  pipeline_deploy: $[eq(variables['pipelineDeploy'], 'true')]
+
+  # Cleanup
+  pipeline_cleanup: $[eq(variables['pipelineCleanup'], 'true')]
+
+  # Deployment options
+  azure_sub: $(azureSubscription)
+  azure_res_group: $(azureResGroup)
+  azure_aks: $(azureAKS)
+  namespace: $(aksNamespace)
+  helm_release: $(helmRelease)
+  kic_replicas: $(replicaCount)
+
+  # Base64 encoded repo keys
+  nginx_repo_cert: "$(nginxRepoCert)"
+  nginx_repo_key: "$(nginxRepoKey)"
+  
+  # Agent VM image name
+  vmImageName: 'ubuntu-latest'
+
+stages:
+- stage: Build
+  condition: eq( variables.pipeline_build, true)
+  displayName: Build and push stage
+  jobs:  
+  - job: Build
+    displayName: Build
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: Bash@3
+      displayName: Checkout Branch $(branch)
+      inputs:
+        targetType: 'inline'
+        script: |
+          git checkout release-1.8
+    - task: Bash@3
+      displayName: Copy NGINX Plus Repo Keys into build directory
+      inputs:
+        targetType: 'inline'
+        script: |
+          echo "$(nginx_repo_cert)" | base64 -d | sudo tee $(Build.SourcesDirectory)/nginx-repo.crt
+          echo "$(nginx_repo_key)" | base64 -d | sudo tee $(Build.SourcesDirectory)/nginx-repo.key
+          pwd
+          ls -lrt
+      
+    - task: Docker@2
+      displayName: Build and push an image to container registry
+      inputs:
+        buildContext: $(Build.SourcesDirectory) 
+        command: buildAndPush
+        repository: $(imageRepository)
+        dockerfile: $(dockerfilePath)
+        containerRegistry: $(dockerRegistryServiceConnection)
+        tags: |
+          $(tag)
+
+- stage: Deploy
+  condition: eq( variables.pipeline_deploy, true)
+  displayName: Deploy KIC
+  jobs:  
+  - job: Build
+    displayName: Deploy KIC
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+      - task: HelmInstaller@0
+        displayName: Install Helm
+        inputs:
+          helmVersion: '3.3.1'
+          installKubectl: true
+          
+      - task: Bash@3
+        displayName: Install NGINX Charts
+        inputs:
+          targetType: inline
+          script: |
+            helm repo add nginx-stable https://helm.nginx.com/stable
+            helm repo update
+
+      - task: Kubernetes@1
+        displayName: Login to AKS
+        inputs:
+          connectionType: 'Azure Resource Manager'
+          azureSubscriptionEndpoint: '$(azure_sub)'
+          azureResourceGroup: '$(azure_res_group)'
+          kubernetesCluster: '$(azure_aks)'
+          namespace: '$(namespace)'
+          command: 'login'
+
+      - task: Kubernetes@1
+        displayName: Setup namespace
+        inputs:
+          connectionType: 'Azure Resource Manager'
+          azureSubscriptionEndpoint: '$(azure_sub)'
+          azureResourceGroup: '$(azure_res_group)'
+          kubernetesCluster: '$(azure_aks)'
+          namespace: '$(namespace)'
+          command: 'apply'
+          useConfigurationFile: true
+          configurationType: 'inline'
+          inline: |
+            {
+              "apiVersion": "v1",
+              "kind": "Namespace",
+              "metadata": {
+                "name": "$(namespace)"
+              }
+            }
+
+      - task: Kubernetes@1
+        displayName: Setup ACR Pull Secret
+        inputs:
+          connectionType: 'Azure Resource Manager'
+          azureSubscriptionEndpoint: '$(azure_sub)'
+          azureResourceGroup: '$(azure_res_group)'
+          kubernetesCluster: '$(azure_aks)'
+          namespace: '$(namespace)'
+          command: 
+          secretType: 'dockerRegistry'
+          containerRegistryType: 'Azure Container Registry'
+          azureSubscriptionEndpointForSecrets: '$(azure_sub)'
+          azureContainerRegistry: '$(containerRegistry)'
+          secretName: 'acr'
+
+      - task: Bash@3
+        displayName: Setup Kubenetes context
+        inputs:
+          targetType: inline
+          script: |
+            kubectl config set-context $(azure_aks) --namespace=$(namespace)
+            kubectl config view
+
+      - task: HelmDeploy@0
+        displayName: Helm Deploy
+        inputs:
+          connectionType: 'Azure Resource Manager'
+          azureSubscription: '$(azure_sub)'
+          azureResourceGroup: '$(azure_res_group)'
+          kubernetesCluster: '$(azure_aks)'
+          namespace: '$(namespace)'
+          command: 'install'
+          chartType: 'Name'
+          chartName: 'nginx-stable/nginx-ingress'
+          releaseName: '$(helm_release)'
+          overrideValues: 'controller.image.repository=$(containerRegistry)/$(imageRepository),controller.image.tag=$(tag),controller.nginxplus=true,controller.service.type=ClusterIP,controller.serviceAccount.imagePullSecrets[0].name=acr,controller.replicaCount=$(kic_replicas)'
+          arguments: '--devel'
+
+- stage: Cleanup
+  condition: eq( variables.pipeline_cleanup, true)
+  displayName: Cleanup KIC
+  jobs:  
+  - job: Build
+    displayName: Remove KIC
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: HelmDeploy@0
+      displayName: Remove the KIC
+      inputs:
+        connectionType: 'Azure Resource Manager'
+        azureSubscription: '$(azure_sub)'
+        azureResourceGroup: '$(azure_res_group)'
+        kubernetesCluster: '$(azure_aks)'
+        namespace: '$(namespace)'
+        command: 'delete'
+        arguments: '$(helm_release)'
