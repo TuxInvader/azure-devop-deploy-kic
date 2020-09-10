@@ -7,11 +7,11 @@ trigger:
 
 variables:
   # Container registry service connection established during pipeline creation
-  imageRepository: 'nginx/npluskic'
+  image_repository: 'nginx/npluskic'
   container_service_connection: $(containerServiceConn)
-  containerRegistry: '$(azureRegistry)'
+  container_registry: '$(azureRegistry)'
   source_path: '$(Build.SourcesDirectory)/kubernetes-ingress'
-  dockerfilePath: '$(source_path)/build/DockerfileWithOpentracingForPlus'
+  dockerfile_path: '$(source_path)/build/DockerfileWithOpentracingForPlus'
   DOCKER_BUILDKIT: 1
 
   branch: release-1.8
@@ -74,8 +74,8 @@ stages:
         containerRegistry: $(container_service_connection)
         buildContext: $(source_path) 
         command: buildAndPush
-        repository: $(imageRepository)
-        dockerfile: $(dockerfilePath)
+        repository: $(image_repository)
+        dockerfile: $(dockerfile_path)
         tags: |
           $(tag)
 
@@ -144,7 +144,7 @@ stages:
           secretType: 'dockerRegistry'
           containerRegistryType: 'Azure Container Registry'
           azureSubscriptionEndpointForSecrets: '$(azure_sub)'
-          azureContainerRegistry: '$(containerRegistry)'
+          azureContainerRegistry: '$(container_registry)'
           secretName: 'acr'
 
       - task: Bash@3
@@ -167,7 +167,7 @@ stages:
           chartType: 'Name'
           chartName: 'nginx-stable/nginx-ingress'
           releaseName: '$(helm_release)'
-          overrideValues: 'controller.image.repository=$(containerRegistry)/$(imageRepository),controller.image.tag=$(tag),controller.nginxplus=true,controller.service.type=ClusterIP,controller.serviceAccount.imagePullSecrets[0].name=acr,controller.replicaCount=$(kic_replicas)'
+          overrideValues: 'controller.image.repository=$(container_registry)/$(image_repository),controller.image.tag=$(tag),controller.nginxplus=true,controller.service.type=ClusterIP,controller.serviceAccount.imagePullSecrets[0].name=acr,controller.replicaCount=$(kic_replicas)'
           arguments: '--devel'
 
 - stage: Cleanup
