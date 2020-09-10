@@ -9,7 +9,7 @@ resources:
  repositories:
    - repository: NGINXKIC
      type: github
-     name: nginxinc/kubernetes-ingress
+     name: TuxInvader/kubernetes-ingress
      endpoint: $(gitHubEndpoint)
 
 variables:
