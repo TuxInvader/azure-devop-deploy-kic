@@ -5,19 +5,11 @@
 trigger:
 - master
 
-resources:
- repositories:
-   - repository: NGINXKIC
-     type: github
-     name: TuxInvader/kubernetes-ingress
-     endpoint: $(github_endpoint)
-
 variables:
   # Container registry service connection established during pipeline creation
   imageRepository: 'nginx/npluskic'
   container_service_connection: $(containerServiceConn)
   containerRegistry: '$(azureRegistry)'
-  github_endpoint: '$(gitHubEndpoint)'
   dockerfilePath: '$(Build.SourcesDirectory)/build/DockerfileWithOpentracingForPlus'
   DOCKER_BUILDKIT: 1
 
@@ -58,13 +50,14 @@ stages:
     pool:
       vmImage: $(vmImageName)
     steps:
-    
-    - checkout: NGINXKIC 
+
     - task: Bash@3
       displayName: Checkout Branch $(branch)
       inputs:
         targetType: 'inline'
         script: |
+          git checkout https://github.com/nginxinc/kubernetes-ingress.git $(Build.SourcesDirectory)
+          cd $(Build.SourcesDirectory)
           git checkout release-1.8
     - task: Bash@3
       displayName: Copy NGINX Plus Repo Keys into build directory
