@@ -10,7 +10,7 @@ resources:
    - repository: NGINXKIC
      type: github
      name: TuxInvader/kubernetes-ingress
-     endpoint: '$(github_endpoint)'
+     endpoint: "$(github_endpoint)"
 
 variables:
   # Container registry service connection established during pipeline creation
