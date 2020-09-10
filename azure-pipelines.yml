@@ -56,7 +56,7 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
-          git checkout https://github.com/nginxinc/kubernetes-ingress.git $(Build.SourcesDirectory)
+          git clone https://github.com/nginxinc/kubernetes-ingress.git $(Build.SourcesDirectory)
           cd $(Build.SourcesDirectory)
           git checkout release-1.8
     - task: Bash@3
