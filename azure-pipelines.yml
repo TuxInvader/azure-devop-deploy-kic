@@ -10,13 +10,14 @@ resources:
    - repository: NGINXKIC
      type: github
      name: TuxInvader/kubernetes-ingress
-     endpoint: '$(gitHubEndpoint)'
+     endpoint: '$(github_endpoint)'
 
 variables:
   # Container registry service connection established during pipeline creation
   imageRepository: 'nginx/npluskic'
   container_service_connection: $(containerServiceConn)
   containerRegistry: '$(azureRegistry)'
+  github_endpoint: '$(gitHubEndpoint)'
   dockerfilePath: '$(Build.SourcesDirectory)/build/DockerfileWithOpentracingForPlus'
   DOCKER_BUILDKIT: 1
 
